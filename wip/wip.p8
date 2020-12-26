@@ -2,73 +2,79 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 world={
- friction=0.25,
- g=1
+  friction=0.25,
+  g=1
 }
 
-character_sprs={
- {1,2},
- {3},
- {4},
- {5,6},
- {7,8},
- {9,10}
+character_sprs = {
+  {1,2},
+  {3},
+  {4},
+  {5,6},
+  {7,8},
+  {9,10}
 }
 
 player={
- character=1,
- x=64,
- y=64,
- on_ground=false,
- v_x=0,
- v_y=0,
- v_max=3,
- a_max=0.75,
- flip_x=false,
- curr_spr_idx=1,
- sprs=character_sprs[5],
- bbox={w=7,h=7},
- char_select=function(self)
-  local new_char=self.character
-  if(btnp(🅾️)) then
-   new_char+=1
+  character=1,
+  x=64,
+  y=64,
+  on_ground=false,
+  v_x=0,
+  v_y=0,
+  v_max=3,
+  a_max=0.75,
+  flip_x=false,
+  curr_spr_idx=1,
+  sprs=character_sprs[5],
+  -- 1=top,2=bottom,3=left,4=right
+  bbox={
+    {{1,0},{6,0}},
+    {{1,7},{6,7}},
+    {{0,1},{0,6}},
+    {{7,1},{7,6}}
+  },
+  char_select=function(self)
+    local new_char=self.character
+    if(btnp(🅾️)) then
+      new_char += 1
+    end
+    if(new_char>#character_sprs) new_char=1
+    self.character=new_char
+    self.sprs=character_sprs[new_char]
+  end,
+  ctrl=function(self)
+    self.char_select(self)
+    if(btn(⬅️)) then
+      self.flip_x=false
+      accel(self,-1*self.a_max,"x")
+    end
+    if(btn(➡️)) then
+    self.flip_x=true
+      accel(self,1*self.a_max,"x")
+    end
+    if(btnp(❎) and self.on_ground) then
+      accel(self,-10,"y")
+      self.on_ground=false
+    end
+  end,
+  move=function(self)
+    move(self)
+  end,
+  animate=function(self)
+    animate(self)
+  end,
+  update=function(self)
+    self.ctrl(self)
+    self.move(self)
+    self.animate(self)
   end
-  if(new_char>#character_sprs) new_char=1
-  self.character=new_char
-  self.sprs=character_sprs[new_char]
- end,
- ctrl=function(self)
-  self.char_select(self)
-	 if(btn(⬅️)) then 
-	  self.flip_x=false 
-	  accel(self,-1*self.a_max,"x") 
-	 end
-	 if(btn(➡️)) then 	  
-   self.flip_x=true
-	  accel(self,1 *self.a_max,"x") 
-	 end
-	 if(btnp(❎) and self.on_ground) then 
-	 	accel(self,-10,"y")
-	 	self.on_ground=false 
-	 end
- end,
- move=function(self)
-  move(self)
- end,
- animate=function(self)
-  animate(self)
- end,
- update=function(self)
-  self.ctrl(self)
-  self.move(self)
-	 self.animate(self)
- end
 }
 
 ents={
- player
+  player
 }
- 
+
 function draw(ent)
  spr(ent.sprs[ent.curr_spr_idx],
      ent.x,
@@ -79,105 +85,119 @@ function draw(ent)
 end
 
 function _update()
- for i, ent in ipairs(ents) do
-  if(ent.update) ent:update()
- end
+  for i, ent in ipairs(ents) do
+    if(ent.update) ent:update()
+  end
 end
 
 
 function _draw()
- cls(0)
- map(0, 0, 0, 0, 128,64)
- for i, ent in ipairs(ents) do
-  draw(ent)
- end
+  cls(0)
+  map(0, 0, 0, 0, 128,64)
+  for i, ent in ipairs(ents) do
+    draw(ent)
+  end
 end
 
--->8
 function norm(val)
- return val/abs(val)
+  if(val==0) return 0
+  return val/abs(val)
 end
 
 function clamp(val,val_max)
- if abs(val)<val_max then
-	 return val
-	else
-	 return val_max*norm(val)
- end
+  if abs(val)<val_max then
+    return val
+  else
+    return val_max*norm(val)
+  end
 end
 
 function accel(ent,amt,direc)
- if     direc=="x" then
-  ent.v_x=clamp(ent.v_x+amt,ent.v_max)
- elseif direc=="y" then
-  ent.v_y=ent.v_y+amt
+  if     direc=="x" then
+    ent.v_x=clamp(ent.v_x+amt,ent.v_max)
+  elseif direc=="y" then
+    ent.v_y=ent.v_y+amt
 	end
 end
 
 function apply_fric_sub(v)
- local normal=norm(v)
- local amp=abs(v)
- local new=amp-world.friction
- if new<0 then new=0 end
- return new*normal
+  local normal=norm(v)
+  local amp=abs(v)
+  local new=amp-world.friction
+  if new<0 then new=0 end
+  return new*normal
 end
 
 function apply_fric(ent)
-	ent.v_x=apply_fric_sub(ent.v_x)
- ent.v_y=apply_fric_sub(ent.v_y)
+  ent.v_x=apply_fric_sub(ent.v_x)
+  ent.v_y=apply_fric_sub(ent.v_y)
 end
 
 function apply_g(ent)
- ent.v_y=ent.v_y+world.g
+  ent.v_y=ent.v_y+world.g
 end
 
-function constrain_to_screen(ent)
- local x=ent.x
- local y=ent.y
- local bbox=ent.bbox
- if(x<0) x=0
- if(x+bbox.w>127) x=127-bbox.w
- if(y<0) y=0
- if(y+bbox.h>127) y=127-bbox.h 
- ent.x=x
- ent.y=y
+function map_collision(x,y,points)
+  local collision=false
+  for i,point in ipairs(points) do
+    local p_x,p_y=unpack(point)
+    local tile=mget((x+p_x)/8,(y+p_y)/8)
+    if(fget(tile,0)) then
+      collision=true
+    end
+  end
+  return collision
 end
 
-function map_collision(x,y,w,h)
-	local top_l=mget(flr(x/8),flr(y/8))
- local bot_l=mget(flr(x/8),flr((y+h)/8))
- local top_r=mget(flr((x+w)/8),flr(y/8))
- local bot_r=mget(flr((x+w)/8),flr((y+h)/8))
-	 
-	return fget(top_l)==1 
-	    or fget(bot_l)==1 
-	    or fget(top_r)==1 
-	    or fget(bot_r)==1
+function chk_collision(ent, collision_fn)
+  -- 1=top,2=bottom,3=left,4=right
+  for dir=1,4 do
+    if(dir==1 and ent.v_y>0) then goto continue end
+    if(dir==2 and ent.v_y<0) then goto continue end
+    if(dir==3 and ent.v_x>0) then goto continue end
+    if(dir==4 and ent.v_x<0) then goto continue end
+
+    local vec_length=sqrt(ent.v_x*ent.v_x + ent.v_y*ent.v_y)
+    local segment=0
+    local proj_x=0
+    local proj_y=0
+    while(not collision_fn(ent.x+proj_x,
+                            ent.y+proj_y,
+                            ent.bbox[dir])
+          and segment<vec_length) do
+      proj_x+=ent.v_x/vec_length
+      proj_y+=ent.v_y/vec_length
+      segment+=1
+    end
+    if(segment<vec_length) then
+      -- doesn't work write with low v
+      -- if(segment>0) then
+      --   printh("correcting - proj_x: "..proj_x.." proj_y: "..proj_y)
+      --   proj_x-=ent.v_x/vec_length
+      --   proj_y-=ent.v_y/vec_length
+      -- end
+      if(dir==3 or dir==4) ent.v_x=proj_x
+      if(dir==1 or dir==2) ent.v_y=proj_y
+      if(ent.v_y==0) ent.on_ground=true
+    end
+    ::continue::
+  end
 end
 
 function move(ent)
- apply_fric(ent)
- apply_g(ent)
- local bbox=ent.bbox
- if(map_collision(
-    ent.x+ent.v_x,ent.y,bbox.w,bbox.h)) then
-  ent.v_x=0
- end
- if(map_collision(
-    ent.x,ent.y+ent.v_y,bbox.w,bbox.h)) then
-  ent.v_y=0
-  ent.on_ground=true
- end 
- ent.x=ent.x+ent.v_x
- ent.y=ent.y+ent.v_y
- constrain_to_screen(ent)
+  apply_fric(ent)
+  apply_g(ent)
+  chk_collision(ent, map_collision)
+  ent.x+=ent.v_x
+  ent.y+=ent.v_y
+  -- constrain_to_screen(ent)
 end
 
 function animate(ent)
- if ent.v_x!=0 or ent.v_y!=0 then
-  ent.curr_spr_idx =
-    (ent.curr_spr_idx % #ent.sprs) + 1
- end
+  if ent.v_x~=0 or ent.v_y~=0 then
+    ent.curr_spr_idx =
+      (ent.curr_spr_idx % #ent.sprs) + 1
+  end
 end
 
 
