@@ -115,7 +115,6 @@ function _update()
  end
 end
 
-
 function _draw()
  cls(0)
  map(0, 0, 0, 0, 128,64)
@@ -189,8 +188,8 @@ function chk_collision(x,y,bbox,on_ground,v_x,v_y,collision_fn)
    proj_y+=v_y/vec_length
    segment+=1
    collision=collision_fn(x+proj_x,
-   																							y+proj_y,
-   																							bbox[dir])
+                          y+proj_y,
+                          bbox[dir])
   end
   if(collision) then
    if(segment>0) then
@@ -199,7 +198,7 @@ function chk_collision(x,y,bbox,on_ground,v_x,v_y,collision_fn)
    end
    if(dir==3 or dir==4) new_v_x=proj_x      
    if(dir==1 or dir==2) new_v_y=proj_y
-  	if(dir==2 and proj_y==0) new_on_ground=true
+   if(dir==2 and proj_y==0) new_on_ground=true
   end
   ::chk_collision_continue::
  end
