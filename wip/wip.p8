@@ -22,9 +22,10 @@ player={
  on_ground=false,
  v_x=0,
  v_y=0,
- v_max=2.5,
- a_max=0.5,
- v_jump=-6,
+ v_x_max=2.5,
+ v_y_max=10,
+ a_run=0.5,
+ a_jump=-6,
  flip_x=false,
  curr_spr_idx=1,
  sprs=character_sprs[5],
@@ -37,7 +38,7 @@ player={
  },
  char_select=function(self)
   local new_char=self.character
-  if(btnp(🅾️)) then
+  if(btnp(❎)) then
    new_char += 1
   end
   if(new_char>#character_sprs) new_char=1
@@ -48,27 +49,50 @@ player={
   self.char_select(self)
   if(btn(⬅️)) then
    self.flip_x=false
-   accel(self,-1*self.a_max,"x")
+   self.v_x=accel(-1*self.a_run,self.v_x,self.v_x_max)
   end
   if(btn(➡️)) then
-  self.flip_x=true
-   accel(self,1*self.a_max,"x")
+   self.flip_x=true
+   self.v_x=accel(1*self.a_run,self.v_x,self.v_x_max)
   end
-  if(btnp(❎) and self.on_ground) then
-   accel(self,self.v_jump,"y")
+  if(btnp(🅾️) and self.on_ground) then
    self.on_ground=false
+   self.v_y=accel(self.a_jump,self.v_y,self.v_y_max)
   end
  end,
  move=function(self)
-  move(self)
+  self.v_x=apply_fric(self.on_ground,self.v_x,world.friction)
+  self.v_y=apply_g(self.v_y,world.g)
+  local v_x,v_y,on_ground=
+   chk_collision(
+    self.x,
+    self.y,
+    self.bbox,
+    self.on_ground,
+    self.v_x,
+    self.v_y,
+    map_collision)
+  self.v_x=v_x
+  self.v_y=v_y
+  self.x+=self.v_x
+  self.y+=self.v_y
+  self.on_ground=on_ground
  end,
  animate=function(self)
-  animate(self)
+  self.curr_spr_idx=
+   animate(
+    self.v_x,
+    self.v_y,
+    self.curr_spr_idx,
+    self.sprs)
  end,
  update=function(self)
   self.ctrl(self)
   self.move(self)
   self.animate(self)
+ end,
+ draw=function(self)
+  _draw_ent(self)
  end
 }
 
@@ -76,7 +100,7 @@ ents={
  player
 }
 
-function draw(ent)
+function _draw_ent(ent)
  spr(ent.sprs[ent.curr_spr_idx],
      ent.x,
      ent.y,
@@ -87,7 +111,7 @@ end
 
 function _update()
  for i, ent in ipairs(ents) do
-  if(ent.update) ent:update()
+  if(ent.update) ent.update(ent)
  end
 end
 
@@ -96,7 +120,7 @@ function _draw()
  cls(0)
  map(0, 0, 0, 0, 128,64)
  for i, ent in ipairs(ents) do
-  draw(ent)
+  if(ent.draw) ent.draw(ent)
  end
 end
 
@@ -113,29 +137,22 @@ function clamp(val,val_max)
  end
 end
 
-function accel(ent,amt,direc)
- if     direc=="x" then
-  ent.v_x=clamp(ent.v_x+amt,ent.v_max)
- elseif direc=="y" then
-  ent.v_y=ent.v_y+amt
-	end
+function accel(amt,v_curr,v_max)
+ return clamp(v_curr+amt,v_max)
 end
 
-function apply_fric_sub(v)
+function apply_fric(on_ground,v,friction)
+ if(not on_ground) return v
+ 
  local normal=norm(v)
  local amp=abs(v)
- local new=amp-world.friction
+ local new=amp-friction
  if new<0 then new=0 end
  return new*normal
 end
 
-function apply_fric(ent)
- ent.v_x=apply_fric_sub(ent.v_x)
- ent.v_y=apply_fric_sub(ent.v_y)
-end
-
-function apply_g(ent)
- ent.v_y=ent.v_y+world.g
+function apply_g(v,g)
+ return v+g;
 end
 
 function map_collision(x,y,points)
@@ -150,54 +167,50 @@ function map_collision(x,y,points)
  return collision
 end
 
-function chk_collision(ent, collision_fn)
+function chk_collision(x,y,bbox,on_ground,v_x,v_y,collision_fn)
+ local new_v_x=v_x
+ local new_v_y=v_y
+ local new_on_ground=on_ground
   -- 1=top,2=bottom,3=left,4=right
  for dir=1,4 do
-  if(dir==1 and ent.v_y>0) then goto chk_collision_continue end
-  if(dir==2 and ent.v_y<0) then goto chk_collision_continue end
-  if(dir==3 and ent.v_x>0) then goto chk_collision_continue end
-  if(dir==4 and ent.v_x<0) then goto chk_collision_continue end
+  if(dir==1 and v_y>0) then goto chk_collision_continue end
+  if(dir==2 and v_y<0) then goto chk_collision_continue end
+  if(dir==3 and v_x>0) then goto chk_collision_continue end
+  if(dir==4 and v_x<0) then goto chk_collision_continue end
 
-  local vec_length=sqrt(ent.v_x*ent.v_x + ent.v_y*ent.v_y)
+  local vec_length=sqrt(v_x*v_x + v_y*v_y)
   local segment=0
   local proj_x=0
   local proj_y=0
-  local collision=collision_fn(ent.x,ent.y,ent.bbox[dir])
+  local collision=collision_fn(x,y,bbox[dir])
   while(not collision
         and segment<vec_length) do
-   proj_x+=ent.v_x/vec_length
-   proj_y+=ent.v_y/vec_length
+   proj_x+=v_x/vec_length
+   proj_y+=v_y/vec_length
    segment+=1
-   collision=collision_fn(ent.x+proj_x,
-   																							ent.y+proj_y,
-   																							ent.bbox[dir])
+   collision=collision_fn(x+proj_x,
+   																							y+proj_y,
+   																							bbox[dir])
   end
   if(collision) then
    if(segment>0) then
-    proj_x-=ent.v_x/vec_length
-    proj_y-=ent.v_y/vec_length
+    proj_x-=v_x/vec_length
+    proj_y-=v_y/vec_length
    end
-   if(dir==3 or dir==4) ent.v_x=proj_x      
-   if(dir==1 or dir==2) ent.v_y=proj_y
-  	if(dir==2 and proj_y==0) ent.on_ground=true
+   if(dir==3 or dir==4) new_v_x=proj_x      
+   if(dir==1 or dir==2) new_v_y=proj_y
+  	if(dir==2 and proj_y==0) new_on_ground=true
   end
   ::chk_collision_continue::
  end
+ return new_v_x,new_v_y,new_on_ground
 end
 
-function move(ent)
- apply_fric(ent)
- apply_g(ent)
- chk_collision(ent, map_collision)
- ent.x+=ent.v_x
- ent.y+=ent.v_y
- -- constrain_to_screen(ent)
-end
-
-function animate(ent)
- if ent.v_x~=0 or ent.v_y~=0 then
-  ent.curr_spr_idx =
-    (ent.curr_spr_idx % #ent.sprs) + 1
+function animate(v_x,v_y,curr_spr_idx,sprs)
+ if v_x~=0 or v_y~=0 then
+  return (curr_spr_idx % #sprs) + 1
+ else
+  return curr_spr_idx
  end
 end
 
