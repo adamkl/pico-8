@@ -1,74 +1,83 @@
 pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
+--impure
+
 world={
  friction=0.15,
  g=0.5
 }
 
-character_sprs = {
- {1,2},
- {3},
- {4},
- {5,6},
- {7,8},
- {9,10}
-}
-
 player={
- character=1,
+ id=1,
  x=64,
  y=64,
  on_ground=false,
+ on_wall=false,
  v_x=0,
  v_y=0,
  v_x_max=2.5,
  v_y_max=10,
- a_run=0.5,
- a_jump=-6,
- flip_x=false,
+ a_run=0.4,
+ a_jump=-5,
+ w_jump_mult=0.75,
+ -- true=right;false=left
+ curr_x_dir=false,
  curr_spr_idx=1,
- sprs=character_sprs[5],
- -- 1=top,2=bottom,3=left,4=right
+ -- 1,2=move;3=stand;4=jump
+ sprs={1,2,3,4},
  bbox={
+ -- 1=top;2=bottom;3=left;4=right
   {{2,0},{5,0}},
   {{2,7},{5,7}},
   {{1,2},{1,5}},
   {{6,2},{6,5}}
  },
- char_select=function(self)
-  local new_char=self.character
-  if(btnp(❎)) then
-   new_char += 1
-  end
-  if(new_char>#character_sprs) new_char=1
-  self.character=new_char
-  self.sprs=character_sprs[new_char]
- end,
+-- char_select=function(self)
+--  local new_char=self.character
+--  if(btnp(❎)) then
+--   new_char += 1
+--  end
+--  if(new_char>#character_sprs) new_char=1
+--  self.character=new_char
+--  self.sprs=character_sprs[new_char]
+-- end,
  ctrl=function(self)
-  self.char_select(self)
+--  self.char_select(self)
   if(btn(⬅️)) then
-   self.flip_x=false
+   self.curr_x_dir=false
    self.v_x=accel(-1*self.a_run,self.v_x,self.v_x_max)
   end
   if(btn(➡️)) then
-   self.flip_x=true
+   self.curr_x_dir=true
    self.v_x=accel(1*self.a_run,self.v_x,self.v_x_max)
   end
-  if(btnp(🅾️) and self.on_ground) then
-   self.on_ground=false
-   self.v_y=accel(self.a_jump,self.v_y,self.v_y_max)
+  if(btnp(🅾️)) then 
+   if(self.on_ground) then
+    self.v_y=accel(self.a_jump,0,self.v_y_max)
+   elseif(self.on_wall and self.v_y>0) then
+    self.v_y=accel(
+     self.w_jump_mult*self.a_jump,
+     0,
+     self.v_y_max)
+    local x_dir=self.curr_x_dir and -1 or 1
+    self.v_x=accel(
+     x_dir*self.v_x_max,
+     0,
+     self.v_x_max)
+   end
   end
  end,
  move=function(self)
   self.v_x=apply_fric(self.on_ground,self.v_x,world.friction)
-  self.v_y=apply_g(self.v_y,world.g)
-  local v_x,v_y,on_ground=
+  self.v_y=apply_g(self.v_y,world.g,self.on_wall)
+  local v_x,v_y,on_ground,on_wall=
    chk_collision(
     self.x,
     self.y,
     self.bbox,
     self.on_ground,
+    self.on_wall,
     self.v_x,
     self.v_y,
     map_collision)
@@ -77,14 +86,20 @@ player={
   self.x+=self.v_x
   self.y+=self.v_y
   self.on_ground=on_ground
+  self.on_wall=on_wall
  end,
  animate=function(self)
-  self.curr_spr_idx=
-   animate(
-    self.v_x,
-    self.v_y,
-    self.curr_spr_idx,
-    self.sprs)
+  if self.on_wall then
+   self.curr_spr_idx=5
+  elseif not self.on_ground then
+   self.curr_spr_idx=4
+   self.curr_spr_idx=5
+  elseif self.v_x~=0 then
+   self.curr_spr_idx=
+    (self.curr_spr_idx % 2) + 1
+  else
+   self.curr_spr_idx=3
+  end
  end,
  update=function(self)
   self.ctrl(self)
@@ -101,12 +116,14 @@ ents={
 }
 
 function _draw_ent(ent)
+ if(ent.id==1) then 
+ end
  spr(ent.sprs[ent.curr_spr_idx],
      ent.x,
      ent.y,
      1,
      1,
-     ent.flip_x)
+     ent.curr_x_dir)
 end
 
 function _update()
@@ -122,6 +139,10 @@ function _draw()
   if(ent.draw) ent.draw(ent)
  end
 end
+
+
+-->8
+--pure
 
 function norm(val)
  if(val==0) return 0
@@ -150,8 +171,9 @@ function apply_fric(on_ground,v,friction)
  return new*normal
 end
 
-function apply_g(v,g)
- return v+g;
+function apply_g(v,g,on_wall)
+ local g_mult=on_wall and 0.5 or 1
+ return v+(g_mult*g);
 end
 
 function map_collision(x,y,points)
@@ -166,10 +188,11 @@ function map_collision(x,y,points)
  return collision
 end
 
-function chk_collision(x,y,bbox,on_ground,v_x,v_y,collision_fn)
+function chk_collision(x,y,bbox,on_ground,on_wall,v_x,v_y,collision_fn)
  local new_v_x=v_x
  local new_v_y=v_y
  local new_on_ground=on_ground
+ local new_on_wall=on_wall
   -- 1=top,2=bottom,3=left,4=right
  for dir=1,4 do
   if(dir==1 and v_y>0) then goto chk_collision_continue end
@@ -196,13 +219,22 @@ function chk_collision(x,y,bbox,on_ground,v_x,v_y,collision_fn)
     proj_x-=v_x/vec_length
     proj_y-=v_y/vec_length
    end
-   if(dir==3 or dir==4) new_v_x=proj_x      
-   if(dir==1 or dir==2) new_v_y=proj_y
-   if(dir==2 and proj_y==0) new_on_ground=true
+   if(dir==1) new_v_y=proj_y
+   if(dir==2) then
+    new_v_y=proj_y
+    new_on_ground=true
+   end
+   if(dir==3 or dir==4) then
+    new_v_x=proj_x
+    new_on_wall=true
+   end      
+  else
+   if(dir==1 or dir==2) new_on_ground=false
+   if(dir==3 or dir==4) new_on_wall=false
   end
   ::chk_collision_continue::
  end
- return new_v_x,new_v_y,new_on_ground
+ return new_v_x,new_v_y,new_on_ground,new_on_wall
 end
 
 function animate(v_x,v_y,curr_spr_idx,sprs)
@@ -217,14 +249,14 @@ end
 
 
 __gfx__
-00000000004444000044440000666600000000000000b0000000b000077777000777770000000000000000000000000000000000000000000000000000000000
-000000000001f4000001f400060006000ccccc0c000bbb00000bbb00077877000778770000888880008888800000000000000000000000000000000000000000
-0070070000fff40000fff400608080600c8c8cc00bbb8bbb0bbb8bbb4477744044777440088eee88088eee880000000000000000000000000000000000000000
-000770000007f0000007f000600000600ccccc000b0bbb0b0b0bbb0b004440000044400008eeeee808eeeee80000000000000000000000000000000000000000
-000770000505550000555000600000600ccccc000b00b00b0b00b00b4444440004444440088eee88088eee880000000000000000000000000000000000000000
-007007000055505000055500600000660ccccc000b00000b0b00000b004440404044400000888880008888800000000000000000000000000000000000000000
-00000000000dd000000dd00006600006000000000000000b0b000000004040000040400000000000000e8e000000000000000000000000000000000000000000
-00000000000d0d0000d0d00000666660000000000000000000000000000040000040000000000000000e8e000000000000000000000000000000000000000000
+0000000000444400004444000044440000444400004444000000b0000777770007777700000000000000000000666600000000000000b0000000b00000000000
+000000000001f4000001f4000001f4000001f4000001f400000bbb0007787700077877000088888000888880060006000ccccc0c000bbb00000bbb0000000000
+0070070000fff40000fff40000fff40000fff40000fff4000bbb8bbb4477744044777440088eee88088eee88608080600c8c8cc00bbb8bbb0bbb8bbb00000000
+000770000007f0000007f0000007f0000007f0000507f0000b0bbb0b004440000044400008eeeee808eeeee8600000600ccccc000b0bbb0b0b0bbb0b00000000
+0007700000555500005555000005500000555500005550000b00b00b4444440004444440088eee88088eee88600000600ccccc000b00b00b0b00b00b00000000
+0070070005055500005550500055550005055050050550000b00000b00444040404440000088888000888880600000660ccccc000b00000b0b00000b00000000
+00000000000dd000000dd000000dd00000ddd0000dddd0000b000000004040000040400000000000000e8e0006600006000000000000000b0b00000000000000
+00000000000d0d0000d0d000000dd00000000d0000d0000000000000000040000040000000000000000e8e000066666000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
